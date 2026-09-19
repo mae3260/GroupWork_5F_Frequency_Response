@@ -677,6 +677,19 @@
   // (omega, F) pair by just changing the inputs -- Problems 3 and 4
   // reference this same panel rather than duplicating it.
   // ---------------------------------------------------------------
+  // Fixed, un-normalized scale constants: the same physical-to-pixel
+  // conversion is used no matter what omega/F the student enters, so a
+  // larger F (or a system whose |G(jw)| is larger) genuinely displaces
+  // the mass more on screen -- nothing is auto-scaled to a constant size.
+  // Likewise playback always advances at PLAYBACK_SPEED x real time, the
+  // same multiplier for every omega, so the relative speed of a fast vs.
+  // slow system is preserved (a w=20 case really does visibly oscillate
+  // faster than a w=0.5 case) rather than each case being stretched to
+  // fit a fixed number of periods on screen.
+  const X_PX_PER_M = 30;   // pixels per meter of displacement
+  const F_PX_PER_N = 25;   // pixels per Newton of applied force
+  const PLAYBACK_SPEED = 1; // 1x = real time
+
   function buildAnimationPanel() {
     const host = document.getElementById("anim-shared");
     host.innerHTML = `
@@ -686,8 +699,8 @@
             <line x1="20" y1="20" x2="180" y2="20" stroke="#8B92A5" stroke-width="4" />
             <polyline id="anim-spring" points="" stroke="#5EEAD4" stroke-width="2" fill="none" />
             <rect id="anim-mass" x="70" y="120" width="60" height="40" rx="4" fill="#FFB454" />
-            <line id="anim-force-line" x1="150" y1="140" x2="150" y2="140" stroke="#FB7185" stroke-width="3" />
-            <polygon id="anim-force-arrow" points="145,140 155,140 150,140" fill="#FB7185" />
+            <line id="anim-force-line" x1="100" y1="140" x2="100" y2="140" stroke="#FB7185" stroke-width="3" />
+            <polygon id="anim-force-arrow" points="95,140 105,140 100,140" fill="#FB7185" />
             <text x="100" y="245" fill="#8B92A5" font-size="10" text-anchor="middle" font-family="JetBrains Mono, monospace">force F(t) shown in red</text>
           </svg>
         </div>
@@ -696,6 +709,7 @@
             <div class="field"><label>&omega; [rad/s]</label><input type="number" id="input-anim-w" value="0.5" step="any" /></div>
             <div class="field"><label>F [N]</label><input type="number" id="input-anim-F" value="1" step="any" /></div>
           </div>
+          <p class="mono" style="font-size:11px; color:var(--muted); margin:0 0 12px 0;">Speed: ${PLAYBACK_SPEED}&times; (real time) &mdash; same for every &omega;</p>
           <div style="display:flex; gap:10px;">
             <button class="run-btn" id="btn-anim-play">PLAY</button>
             <button class="run-btn secondary" id="btn-anim-reset">RESET</button>
@@ -731,38 +745,29 @@
       const x = mag * F * Math.sin(w * simTime + ph);
       const f = F * Math.sin(w * simTime);
 
-      // scale physical values to pixels so the animation stays visible
-      // regardless of the chosen omega/F (amplitude varies hugely across
-      // the assignment's frequency range)
-      const xScale = 40 / (mag * F || 1);
-      const fScale = 25 / (F || 1);
-      const massY = 140 + x * xScale;
+      const massY = 140 + x * X_PX_PER_M;
 
       document.getElementById("anim-mass").setAttribute("y", massY - 20);
       document.getElementById("anim-spring").setAttribute("points", springPoints(20, massY - 20, 8));
       // Vertical system (mass hangs from the spring), so the applied force
-      // is drawn as a vertical arrow beside the mass -- pointing down for
+      // is drawn as a vertical arrow acting through the mass's own center
+      // (x=100, the center of the mass rect) -- pointing down for
       // positive f(t) (same direction as positive x, i.e. downward
       // displacement), up for negative f(t).
-      const forceY2 = massY + f * fScale;
-      document.getElementById("anim-force-line").setAttribute("x1", 150);
+      const forceY2 = massY + f * F_PX_PER_N;
+      document.getElementById("anim-force-line").setAttribute("x1", 100);
       document.getElementById("anim-force-line").setAttribute("y1", massY);
-      document.getElementById("anim-force-line").setAttribute("x2", 150);
+      document.getElementById("anim-force-line").setAttribute("x2", 100);
       document.getElementById("anim-force-line").setAttribute("y2", forceY2);
       const arrowDir = f >= 0 ? 1 : -1;
-      document.getElementById("anim-force-arrow").setAttribute("points", `${145},${forceY2} ${155},${forceY2} ${150},${forceY2 + 10 * arrowDir}`);
+      document.getElementById("anim-force-arrow").setAttribute("points", `${95},${forceY2} ${105},${forceY2} ${100},${forceY2 + 10 * arrowDir}`);
     }
 
     function tick(ts) {
       if (!playing) return;
       if (animStart === null) animStart = ts;
-      const w = Number(document.getElementById("input-anim-w").value) || 0.5;
-      const period = (2 * Math.PI) / w;
-      // playback rate chosen so ~4 periods play out over ~6 real seconds,
-      // regardless of how fast/slow the actual omega is
-      const playbackRate = (4 * period) / 6;
       const elapsedReal = (ts - animStart) / 1000;
-      const simTime = elapsedReal * playbackRate;
+      const simTime = elapsedReal * PLAYBACK_SPEED;
       drawFrame(simTime);
       rafId = requestAnimationFrame(tick);
     }
