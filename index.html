@@ -877,6 +877,11 @@
           <h4 class="part-title">Frequency Response (Bode plot)</h4>
           <p class="instructions">Record the amplitude ratio and phase difference at &omega; = 0.5 rad/s from the plots
             below.</p>
+          <div class="note-box">
+            <b>Navigating the plots:</b> click and drag inside a plot to zoom into a box. Drag along an axis
+            (on the tick labels) to pan that axis. <b>Double-click</b> the plot to zoom back out to the full view.
+            Hover over the curve to see its exact values.
+          </div>
           <div class="plots-row">
             <div class="plot-col">
               <p class="plot-label">amplitude ratio |G(j&omega;)|</p>
@@ -893,8 +898,6 @@
             <div class="field"><label>your recorded phase (deg)</label><input type="number" id="input-p2-record-phase"
                 value="" step="any" /></div>
           </div>
-          <button class="run-btn" id="btn-p2-record-check">CHECK</button>
-          <div class="match-banner" id="banner-p2-record"></div>
 
           <h4 class="part-title">Time Response</h4>
           <p class="instructions">Plug in your values and enter your x(t) below, with &phi; in radians.</p>
@@ -912,11 +915,10 @@
                 <div class="field"><label>x(t) =</label><input type="text" id="input-p2-xt" value=""
                     placeholder="in terms of t" spellcheck="false" /></div>
               </div>
-              <button class="run-btn" id="btn-p2-xt-check">CHECK</button>
-              <div class="match-banner" id="banner-p2-xt"></div>
+              <button class="run-btn" id="btn-p2-xt-check">PLOT</button>
               <p class="field-err" id="err-p2-xt"></p>
               <div class="plot-host" id="plot-p2-time">
-                <div class="placeholder">Enter x(t) and click Check.</div>
+                <div class="placeholder">Enter x(t) and click Plot.</div>
               </div>
             </div>
           </div>
@@ -945,6 +947,23 @@
           </p>
           <p class="given-line">GIVEN &middot; m = <b>0.1 kg</b> &middot; k = <b>1 N/m</b> &middot; b = <b>0.2 Ns/m</b>
             (same system as Problem 2)</p>
+
+          <h4 class="part-title">Frequency Response (Bode plot)</h4>
+          <div class="note-box">
+            These are the <b>same Bode plots from Problem 2</b> (m = 0.1, k = 1, b = 0.2).
+            Drag to zoom,
+            drag an axis to pan, and double-click to zoom back out.
+          </div>
+          <div class="plots-row">
+            <div class="plot-col">
+              <p class="plot-label">amplitude ratio |G(j&omega;)|</p>
+              <div class="plot-host" id="plot-bode-mag-p3"></div>
+            </div>
+            <div class="plot-col">
+              <p class="plot-label">phase difference (degrees)</p>
+              <div class="plot-host" id="plot-bode-phase-p3"></div>
+            </div>
+          </div>
 
           <div id="p3-case-3"></div>
           <div id="p3-case-20"></div>
@@ -1131,7 +1150,10 @@
           document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           Object.values(SECTION_IDS).forEach((id) => { document.getElementById(id).style.display = "none"; });
-          document.getElementById(SECTION_IDS[btn.dataset.part]).style.display = "block";
+          const section = document.getElementById(SECTION_IDS[btn.dataset.part]);
+          section.style.display = "block";
+          // Plots drawn while their tab was hidden need a resize to fit their box.
+          section.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.Plots.resize(el));
         });
       });
 
@@ -1149,38 +1171,45 @@
         return arr;
       })();
 
+      // MATLAB-style log grid: solid gridlines at each decade, dotted minor
+      // gridlines at 2..9 x each decade, decade labels as powers of 10, and a
+      // box drawn around the plotting area.
+      const LOG_AXIS = {
+        type: "log", dtick: 1, exponentformat: "power", showexponent: "all",
+        gridcolor: "#4A5163", gridwidth: 1,
+        minor: { dtick: "D1", showgrid: true, gridcolor: "#2E3444", griddash: "dot", ticks: "inside", ticklen: 3, tickcolor: "#8B92A5" },
+        ticks: "inside", ticklen: 6, tickcolor: "#8B92A5",
+        showline: true, linecolor: "#8B92A5", mirror: "ticks",
+      };
+      const BODE_X = Object.assign({}, LOG_AXIS, { range: [Math.log10(0.5), Math.log10(50)] });
+      const BODE_MAG_Y = Object.assign({}, LOG_AXIS, { range: [-3, 1] });
+      const BODE_PHASE_Y = {
+        range: [-180, 0], dtick: 30, gridcolor: "#4A5163",
+        minor: { dtick: 10, showgrid: true, gridcolor: "#2E3444", griddash: "dot" },
+        ticks: "inside", ticklen: 6, tickcolor: "#8B92A5",
+        showline: true, linecolor: "#8B92A5", mirror: "ticks", zeroline: false,
+      };
+      function bodeMagLayout() { return plotLayout("|G(j\u03c9)| [m/N]", { xTitle: "\u03c9 [rad/s]", xaxis: BODE_X, yaxis: BODE_MAG_Y }); }
+      function bodePhaseLayout() { return plotLayout("phase [deg]", { xTitle: "\u03c9 [rad/s]", xaxis: BODE_X, yaxis: BODE_PHASE_Y }); }
+
       function renderBodeSingle(magDivId, phaseDivId, b) {
         const mags = BODE_OMEGA.map((w) => magnitude(w, b));
         const phases = BODE_OMEGA.map((w) => (phaseRad(w, b) * 180) / Math.PI);
         Plotly.newPlot(magDivId, [{ x: BODE_OMEGA, y: mags, mode: "lines", line: { color: "#FFB454", width: 2.2 }, showlegend: false }],
-          plotLayout("|G(j\u03c9)| [m/N]", { xTitle: "\u03c9 [rad/s]", xaxis: { type: "log", range: [Math.log10(0.5), Math.log10(50)] }, yaxis: { type: "log", range: [-3, 1] } }), PLOT_OPTS);
+          bodeMagLayout(), PLOT_OPTS);
         Plotly.newPlot(phaseDivId, [{ x: BODE_OMEGA, y: phases, mode: "lines", line: { color: "#5EEAD4", width: 2.2 }, showlegend: false }],
-          plotLayout("phase [deg]", { xTitle: "\u03c9 [rad/s]", xaxis: { type: "log", range: [Math.log10(0.5), Math.log10(50)] }, yaxis: { range: [-180, 0] } }), PLOT_OPTS);
+          bodePhaseLayout(), PLOT_OPTS);
       }
       renderBodeSingle("plot-bode-mag-p2", "plot-bode-phase-p2", 0.2);
+      renderBodeSingle("plot-bode-mag-p3", "plot-bode-phase-p3", 0.2);
 
       // ---------------------------------------------------------------
-      // Problem 2: record amplitude/phase check, x(t) formula check.
+      // Problem 2: plot the student's x(t) against the input force.
+      // No right/wrong banner -- the correct x(t) is overlaid (dotted) instead.
       // ---------------------------------------------------------------
-      document.getElementById("btn-p2-record-check").addEventListener("click", () => {
-        const bannerEl = document.getElementById("banner-p2-record");
-        const trueMag = magnitude(0.5, 0.2), truePhaseDeg = (phaseRad(0.5, 0.2) * 180) / Math.PI;
-        const userMag = Number(document.getElementById("input-p2-record-mag").value);
-        const userPhase = Number(document.getElementById("input-p2-record-phase").value);
-        if (!isFinite(userMag) || !isFinite(userPhase)) {
-          bannerEl.className = "match-banner no-match";
-          bannerEl.textContent = "Enter numbers for both fields.";
-          return;
-        }
-        const ok = Math.abs(userMag - trueMag) / trueMag < 0.05 && Math.abs(userPhase - truePhaseDeg) < 3;
-        bannerEl.className = ok ? "match-banner match" : "match-banner no-match";
-        bannerEl.textContent = ok ? "\u2713 Correct." : "\u2717 Not quite \u2014 look again at \u03c9 = 0.5 on both plots.";
-      });
-
-      function checkXtFormula(exprId, errId, bannerId, plotId, w, F, b) {
+      function plotXtFormula(exprId, errId, plotId, w, F) {
         const errEl = document.getElementById(errId);
-        const bannerEl = document.getElementById(bannerId);
-        errEl.textContent = ""; bannerEl.className = "match-banner"; bannerEl.textContent = "";
+        errEl.textContent = "";
         const raw = document.getElementById(exprId).value.trim();
         if (!raw) { errEl.textContent = "Enter an expression."; return false; }
         if (!/\bt\b/.test(raw)) { errEl.textContent = "Enter an expression in terms of t."; return false; }
@@ -1198,25 +1227,18 @@
           errEl.textContent = "Couldn't evaluate this expression.";
           return false;
         }
-        const yTrue = trueXofT(tArr, w, F, b);
+        const yTrue = trueXofT(tArr, w, F, 0.2);
         const yForce = tArr.map((t) => F * Math.sin(w * t));
-
-        let sumSq = 0, maxAbs = 0;
-        for (let i = 0; i < tArr.length; i++) { const d = yUser[i] - yTrue[i]; sumSq += d * d; maxAbs = Math.max(maxAbs, Math.abs(yTrue[i])); }
-        const relErr = Math.sqrt(sumSq / tArr.length) / (maxAbs || 1);
-        const ok = relErr < 0.02;
-        bannerEl.className = ok ? "match-banner match" : "match-banner no-match";
-        bannerEl.textContent = ok ? "\u2713 Correct." : "\u2717 Not quite \u2014 try again.";
 
         Plotly.newPlot(plotId, [
           { x: tArr, y: yForce, mode: "lines", line: { color: "#A78BFA", width: 1.8 }, name: "f(t)" },
           { x: tArr, y: yUser, mode: "lines", line: { color: "#60A5FA", width: 2.2 }, name: "your x(t)" },
           { x: tArr, y: yTrue, mode: "lines", line: { color: "#34D399", width: 2, dash: "dot" }, name: "correct x(t)" },
         ], plotLayout("x [m], f [N]"), PLOT_OPTS);
-        return ok;
+        return true;
       }
       document.getElementById("btn-p2-xt-check").addEventListener("click", () => {
-        checkXtFormula("input-p2-xt", "err-p2-xt", "banner-p2-xt", "plot-p2-time", 0.5, 1, 0.2);
+        plotXtFormula("input-p2-xt", "err-p2-xt", "plot-p2-time", 0.5, 1);
         runFlags.p2 = true;
         scheduleSave();
       });
@@ -1225,8 +1247,14 @@
       // Problem 3: dynamically build two near-identical sub-case panels
       // (omega=3, omega=20), each: find F for X=1, then verify x(t).
       // ---------------------------------------------------------------
+      // Force amplitude used for f(t) and the correct x(t): the student's own F,
+      // or the F that gives X = 1 if the field is blank.
+      function forceAmpFor(key, w) {
+        const raw = document.getElementById(`input-${key}-F`).value.trim();
+        const F = Number(raw);
+        return raw !== "" && isFinite(F) ? F : 1 / magnitude(w, 0.2);
+      }
       function buildFreqCasePanel(containerId, w, key) {
-        const trueF = 1 / magnitude(w, 0.2);
         const container = document.getElementById(containerId);
         container.innerHTML = `
       <h4 class="part-title">\u03c9 = ${w} rad/s</h4>
@@ -1234,30 +1262,16 @@
       <div class="form-grid one">
         <div class="field"><label>F (for X = 1)</label><input type="number" id="input-${key}-F" value="" step="any" /></div>
       </div>
-      <button class="run-btn" id="btn-${key}-F-check">CHECK</button>
-      <div class="match-banner" id="banner-${key}-F"></div>
-      <p class="instructions" style="margin-top:16px;">Now verify with x(t):</p>
+      <p class="instructions" style="margin-top:16px;">Now enter x(t) and plot it against f(t):</p>
       <div class="form-grid one">
         <div class="field"><label>x(t) =</label><input type="text" id="input-${key}-xt" value="" placeholder="in terms of t" spellcheck="false" /></div>
       </div>
-      <button class="run-btn" id="btn-${key}-xt-check">CHECK</button>
-      <div class="match-banner" id="banner-${key}-xt"></div>
+      <button class="run-btn" id="btn-${key}-xt-check">PLOT</button>
       <p class="field-err" id="err-${key}-xt"></p>
-      <div class="plot-host" id="plot-${key}-time"><div class="placeholder">Enter F above, then x(t), and click Check.</div></div>
+      <div class="plot-host" id="plot-${key}-time"><div class="placeholder">Enter F above, then x(t), and click Plot.</div></div>
     `;
-        document.getElementById(`btn-${key}-F-check`).addEventListener("click", () => {
-          const bannerEl = document.getElementById(`banner-${key}-F`);
-          const userF = Number(document.getElementById(`input-${key}-F`).value);
-          if (!isFinite(userF)) { bannerEl.className = "match-banner no-match"; bannerEl.textContent = "Enter a number."; return; }
-          const ok = Math.abs(userF - trueF) / trueF < 0.02;
-          bannerEl.className = ok ? "match-banner match" : "match-banner no-match";
-          bannerEl.textContent = ok ? "\u2713 Correct." : "\u2717 Not quite \u2014 try again.";
-          scheduleSave();
-        });
         document.getElementById(`btn-${key}-xt-check`).addEventListener("click", () => {
-          const F = Number(document.getElementById(`input-${key}-F`).value);
-          const useF = isFinite(F) ? F : trueF;
-          checkXtFormula(`input-${key}-xt`, `err-${key}-xt`, `banner-${key}-xt`, `plot-${key}-time`, w, useF, 0.2);
+          plotXtFormula(`input-${key}-xt`, `err-${key}-xt`, `plot-${key}-time`, w, forceAmpFor(key, w));
           runFlags[key] = true;
           scheduleSave();
         });
@@ -1271,7 +1285,6 @@
       // student to read amplitude ratio and phase off the plot.
       // ---------------------------------------------------------------
       function buildReadOffPanel(containerId, w, key) {
-        const trueMag = magnitude(w, 0.2), truePhaseDeg = (phaseRad(w, 0.2) * 180) / Math.PI;
         const container = document.getElementById(containerId);
         container.innerHTML = `
       <h4 class="part-title">\u03c9 = ${w} rad/s</h4>
@@ -1280,8 +1293,6 @@
         <div class="field"><label>your calculated amplitude ratio</label><input type="number" id="input-${key}-mag" value="" step="any" /></div>
         <div class="field"><label>your calculated phase (deg)</label><input type="number" id="input-${key}-phase" value="" step="any" /></div>
       </div>
-      <button class="run-btn" id="btn-${key}-check">CHECK</button>
-      <div class="match-banner" id="banner-${key}"></div>
     `;
         const N = 800;
         const tArr = Array.from({ length: N }, (_, i) => (i / (N - 1)) * 20);
@@ -1291,17 +1302,6 @@
           { x: tArr, y: yForce, mode: "lines", line: { color: "#A78BFA", width: 1.8 }, name: "f(t)" },
           { x: tArr, y: yTrue, mode: "lines", line: { color: "#34D399", width: 2.2 }, name: "x(t)" },
         ], plotLayout("x [m], f [N]"), PLOT_OPTS);
-
-        document.getElementById(`btn-${key}-check`).addEventListener("click", () => {
-          const bannerEl = document.getElementById(`banner-${key}`);
-          const userMag = Number(document.getElementById(`input-${key}-mag`).value);
-          const userPhase = Number(document.getElementById(`input-${key}-phase`).value);
-          if (!isFinite(userMag) || !isFinite(userPhase)) { bannerEl.className = "match-banner no-match"; bannerEl.textContent = "Enter numbers for both fields."; return; }
-          const ok = Math.abs(userMag - trueMag) / trueMag < 0.05 && Math.abs(userPhase - truePhaseDeg) < 5;
-          bannerEl.className = ok ? "match-banner match" : "match-banner no-match";
-          bannerEl.textContent = ok ? "\u2713 Correct." : "\u2717 Not quite \u2014 look again at the time shift and relative heights.";
-          scheduleSave();
-        });
       }
       buildReadOffPanel("p4-case-2", 2, "p4c2");
       buildReadOffPanel("p4-case-10", 10, "p4c10");
@@ -1336,8 +1336,8 @@
           magTraces.push({ x: BODE_OMEGA, y: mags, mode: "lines", line: { color: tr.color, width: 2.2 }, name: tr.label });
           phaseTraces.push({ x: BODE_OMEGA, y: phases, mode: "lines", line: { color: tr.color, width: 2.2 }, name: tr.label });
         });
-        Plotly.newPlot(magHost, magTraces, plotLayout("|G(j\u03c9)| [m/N]", { xTitle: "\u03c9 [rad/s]", xaxis: { type: "log", range: [Math.log10(0.5), Math.log10(50)] }, yaxis: { type: "log", range: [-3, 1] } }), PLOT_OPTS);
-        Plotly.newPlot(phaseHost, phaseTraces, plotLayout("phase [deg]", { xTitle: "\u03c9 [rad/s]", xaxis: { type: "log", range: [Math.log10(0.5), Math.log10(50)] }, yaxis: { range: [-180, 0] } }), PLOT_OPTS);
+        Plotly.newPlot(magHost, magTraces, bodeMagLayout(), PLOT_OPTS);
+        Plotly.newPlot(phaseHost, phaseTraces, bodePhaseLayout(), PLOT_OPTS);
       }
       document.getElementById("btn-p5-add").addEventListener("click", () => {
         const errEl = document.getElementById("err-p5");
@@ -1894,15 +1894,9 @@
           state.p5Traces.forEach((t) => p5Traces.push(t));
           redrawP5();
         }
-        if (state.fields && state.fields["input-p2-xt"]) checkXtFormula("input-p2-xt", "err-p2-xt", "banner-p2-xt", "plot-p2-time", 0.5, 1, 0.2);
-        if (state.fields && state.fields["input-p3c3-xt"]) {
-          const F = Number(document.getElementById("input-p3c3-F").value) || 1 / magnitude(3, 0.2);
-          checkXtFormula("input-p3c3-xt", "err-p3c3-xt", "banner-p3c3-xt", "plot-p3c3-time", 3, F, 0.2);
-        }
-        if (state.fields && state.fields["input-p3c20-xt"]) {
-          const F = Number(document.getElementById("input-p3c20-F").value) || 1 / magnitude(20, 0.2);
-          checkXtFormula("input-p3c20-xt", "err-p3c20-xt", "banner-p3c20-xt", "plot-p3c20-time", 20, F, 0.2);
-        }
+        if (state.fields && state.fields["input-p2-xt"]) plotXtFormula("input-p2-xt", "err-p2-xt", "plot-p2-time", 0.5, 1);
+        if (state.fields && state.fields["input-p3c3-xt"]) plotXtFormula("input-p3c3-xt", "err-p3c3-xt", "plot-p3c3-time", 3, forceAmpFor("p3c3", 3));
+        if (state.fields && state.fields["input-p3c20-xt"]) plotXtFormula("input-p3c20-xt", "err-p3c20-xt", "plot-p3c20-time", 20, forceAmpFor("p3c20", 20));
         if (state.activeTab) {
           const btn = document.querySelector(`.nav-btn[data-part="${state.activeTab}"]`);
           if (btn) btn.click();
