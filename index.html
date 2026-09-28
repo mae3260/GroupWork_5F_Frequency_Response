@@ -1175,7 +1175,7 @@
       // gridlines at 2..9 x each decade, decade labels as powers of 10, and a
       // box drawn around the plotting area.
       const LOG_AXIS = {
-        type: "log", dtick: 1, exponentformat: "power", showexponent: "all",
+        type: "log",
         gridcolor: "#4A5163", gridwidth: 1,
         minor: { dtick: "D1", showgrid: true, gridcolor: "#2E3444", griddash: "dot", ticks: "inside", ticklen: 3, tickcolor: "#8B92A5" },
         ticks: "inside", ticklen: 6, tickcolor: "#8B92A5",
@@ -1189,15 +1189,61 @@
         ticks: "inside", ticklen: 6, tickcolor: "#8B92A5",
         showline: true, linecolor: "#8B92A5", mirror: "ticks", zeroline: false,
       };
+      // ---------------------------------------------------------------
+      // Log-axis tick labels. Plotly's default labels the in-between ticks
+      // with bare digits ("2", "5"), which read like whole numbers. Instead:
+      // zoomed out, label only the powers of 10 (like MATLAB); zoomed in,
+      // label the in-between ticks with their full value (0.2, 20, ...).
+      // Re-applied on every zoom/pan and on double-click reset.
+      // ---------------------------------------------------------------
+      function logTickSpec(range, power) {
+        const lo = Math.min(range[0], range[1]), hi = Math.max(range[0], range[1]);
+        const span = hi - lo;
+        const mults = span > 1.3 ? [1] : span > 0.5 ? [1, 2, 5] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        const vals = [], text = [];
+        for (let d = Math.floor(lo); d <= Math.ceil(hi); d++) {
+          mults.forEach((m) => {
+            const lv = d + Math.log10(m);
+            if (lv < lo - 1e-9 || lv > hi + 1e-9) return;
+            const v = m * Math.pow(10, d);
+            vals.push(v);
+            text.push(power && m === 1 ? `10<sup>${d}</sup>` : String(Number(v.toPrecision(3))));
+          });
+        }
+        if (vals.length < 2) return { tickmode: "auto", tickvals: null, ticktext: null };
+        return { tickmode: "array", tickvals: vals, ticktext: text };
+      }
+      function applyLogTicks(gd, power) {
+        const update = {};
+        ["xaxis", "yaxis"].forEach((ax) => {
+          const fa = gd._fullLayout && gd._fullLayout[ax];
+          if (!fa || fa.type !== "log") return;
+          Object.entries(logTickSpec(fa.range, power)).forEach(([k, v]) => { update[`${ax}.${k}`] = v; });
+        });
+        if (Object.keys(update).length) Plotly.relayout(gd, update);
+      }
+      function newLogPlot(divId, data, layout, config) {
+        return Plotly.newPlot(divId, data, layout, config).then((gd) => {
+          if (gd._logTickHandler) gd.removeListener("plotly_relayout", gd._logTickHandler);
+          gd._logTickHandler = (ev) => {
+            if (Object.keys(ev).every((k) => /tick/.test(k))) return; // our own relayout
+            applyLogTicks(gd, true);
+          };
+          gd.on("plotly_relayout", gd._logTickHandler);
+          applyLogTicks(gd, true);
+          return gd;
+        });
+      }
+
       function bodeMagLayout() { return plotLayout("|G(j\u03c9)| [m/N]", { xTitle: "\u03c9 [rad/s]", xaxis: BODE_X, yaxis: BODE_MAG_Y }); }
       function bodePhaseLayout() { return plotLayout("phase [deg]", { xTitle: "\u03c9 [rad/s]", xaxis: BODE_X, yaxis: BODE_PHASE_Y }); }
 
       function renderBodeSingle(magDivId, phaseDivId, b) {
         const mags = BODE_OMEGA.map((w) => magnitude(w, b));
         const phases = BODE_OMEGA.map((w) => (phaseRad(w, b) * 180) / Math.PI);
-        Plotly.newPlot(magDivId, [{ x: BODE_OMEGA, y: mags, mode: "lines", line: { color: "#FFB454", width: 2.2 }, showlegend: false }],
+        newLogPlot(magDivId, [{ x: BODE_OMEGA, y: mags, mode: "lines", line: { color: "#FFB454", width: 2.2 }, showlegend: false }],
           bodeMagLayout(), PLOT_OPTS);
-        Plotly.newPlot(phaseDivId, [{ x: BODE_OMEGA, y: phases, mode: "lines", line: { color: "#5EEAD4", width: 2.2 }, showlegend: false }],
+        newLogPlot(phaseDivId, [{ x: BODE_OMEGA, y: phases, mode: "lines", line: { color: "#5EEAD4", width: 2.2 }, showlegend: false }],
           bodePhaseLayout(), PLOT_OPTS);
       }
       renderBodeSingle("plot-bode-mag-p2", "plot-bode-phase-p2", 0.2);
@@ -1336,8 +1382,8 @@
           magTraces.push({ x: BODE_OMEGA, y: mags, mode: "lines", line: { color: tr.color, width: 2.2 }, name: tr.label });
           phaseTraces.push({ x: BODE_OMEGA, y: phases, mode: "lines", line: { color: tr.color, width: 2.2 }, name: tr.label });
         });
-        Plotly.newPlot(magHost, magTraces, bodeMagLayout(), PLOT_OPTS);
-        Plotly.newPlot(phaseHost, phaseTraces, bodePhaseLayout(), PLOT_OPTS);
+        newLogPlot(magHost, magTraces, bodeMagLayout(), PLOT_OPTS);
+        newLogPlot(phaseHost, phaseTraces, bodePhaseLayout(), PLOT_OPTS);
       }
       document.getElementById("btn-p5-add").addEventListener("click", () => {
         const errEl = document.getElementById("err-p5");
